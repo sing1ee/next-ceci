@@ -6,6 +6,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { supabase } from "@/lib/supabase";
 import { User } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
+import { UserProfileEdit } from "./UserProfileEdit";
 
 interface DivinationResult {
     id?: string;
@@ -14,10 +15,16 @@ interface DivinationResult {
     created_at?: string;
 }
 
+interface UserProfile {
+    id: string;
+    display_name: string;
+}
+
 export function CharacterDivination() {
     const [results, setResults] = useState<DivinationResult[]>([]);
     const [input, setInput] = useState("");
     const [user, setUser] = useState<User | null>(null);
+    const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -32,6 +39,7 @@ export function CharacterDivination() {
             setUser(session?.user ?? null);
             if (session?.user) {
                 fetchDivinations(session.user.id);
+                fetchUserProfile(session.user.id);
             }
             setLoading(false);
         };
@@ -43,6 +51,7 @@ export function CharacterDivination() {
                 setUser(currentUser ?? null);
                 if (currentUser) {
                     fetchDivinations(currentUser.id);
+                    fetchUserProfile(currentUser.id);
                     if (event === "SIGNED_IN") {
                         toast({
                             title: "登录成功",
@@ -51,6 +60,7 @@ export function CharacterDivination() {
                     }
                 } else {
                     setResults([]);
+                    setUserProfile(null);
                     if (event === "SIGNED_OUT") {
                         toast({
                             title: "已退出登录",
@@ -65,6 +75,20 @@ export function CharacterDivination() {
             authListener.subscription.unsubscribe();
         };
     }, [toast]);
+
+    const fetchUserProfile = async (userId: string) => {
+        const { data, error } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", userId)
+            .single();
+
+        if (error) {
+            console.error("Error fetching user profile:", error);
+        } else if (data) {
+            setUserProfile(data);
+        }
+    };
 
     const fetchDivinations = async (userId: string) => {
         const { data, error } = await supabase
@@ -108,11 +132,30 @@ export function CharacterDivination() {
         e.preventDefault();
         try {
             if (authMode === "register") {
-                const { error } = await supabase.auth.signUp({
+                // Check if the email already exists
+                const { data, error } = await supabase
+                    .from("profiles")
+                    .select("email")
+                    .eq("email", email)
+                    .single();
+
+                if (data) {
+                    // Email already exists
+                    toast({
+                        title: "邮箱已注册",
+                        description: "该邮箱已注册，您可以直接登录。",
+                        variant: "default",
+                    });
+                    setAuthMode("login"); // Switch to login mode
+                    return;
+                }
+
+                // If email doesn't exist, proceed with registration
+                const { error: signUpError } = await supabase.auth.signUp({
                     email,
                     password,
                 });
-                if (error) throw error;
+                if (signUpError) throw signUpError;
                 toast({
                     title: "注册成功",
                     description: "请查收邮件进行确认。",
@@ -138,13 +181,42 @@ export function CharacterDivination() {
         try {
             const { error } = await supabase.auth.signOut();
             if (error) throw error;
-            // Logout success toast is handled in the onAuthStateChange listener
         } catch (error) {
             toast({
                 title: "退出登录失败",
                 description: error.message,
                 variant: "destructive",
             });
+        }
+    };
+
+    const handleProfileUpdate = async (newDisplayName: string) => {
+        if (user) {
+            try {
+                const { error } = await supabase
+                    .from("profiles")
+                    .update({
+                        display_name: newDisplayName,
+                        updated_at: new Date(),
+                    })
+                    .eq("id", user.id);
+
+                if (error) throw error;
+
+                setUserProfile((prev) =>
+                    prev ? { ...prev, display_name: newDisplayName } : null
+                );
+                toast({
+                    title: "个人信息更新成功",
+                    description: "您的显示名称已更新。",
+                });
+            } catch (error) {
+                toast({
+                    title: "更新失败",
+                    description: error.message,
+                    variant: "destructive",
+                });
+            }
         }
     };
 
@@ -254,8 +326,20 @@ export function CharacterDivination() {
                             </Button>
                         </SheetTrigger>
                         <SheetContent className="bg-amber-50">
-                            <h3 className="text-lg font-semibold">用户信息</h3>
-                            <p>邮箱：{user.email}</p>
+                            <h3 className="text-lg font-semibold mb-4">
+                                用户信息
+                            </h3>
+                            <p className="mb-2">邮箱：{user.email}</p>
+                            <p className="mb-4">
+                                显示名称：{userProfile?.display_name}
+                            </p>
+                            <UserProfileEdit
+                                userId={user.id}
+                                initialDisplayName={
+                                    userProfile?.display_name || ""
+                                }
+                                onUpdate={handleProfileUpdate}
+                            />
                             <Button
                                 onClick={handleLogout}
                                 className="mt-4 bg-red-800 hover:bg-red-700"
