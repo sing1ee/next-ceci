@@ -193,23 +193,55 @@ export function CharacterDivination() {
     const handleProfileUpdate = async (newDisplayName: string) => {
         if (user) {
             try {
-                const { error } = await supabase
-                    .from("profiles")
-                    .update({
-                        display_name: newDisplayName,
-                        updated_at: new Date(),
-                    })
-                    .eq("id", user.id);
+                // Fetch the existing profile
+                const { data: existingProfile, error: fetchError } =
+                    await supabase
+                        .from("profiles")
+                        .select("id")
+                        .eq("id", user.id)
+                        .single();
 
-                if (error) throw error;
+                if (fetchError && fetchError.code === "PGRST116") {
+                    // If no profile exists, insert a new one
+                    const { error: insertError } = await supabase
+                        .from("profiles")
+                        .insert({
+                            id: user.id,
+                            display_name: newDisplayName,
+                            updated_at: new Date(),
+                        });
 
-                setUserProfile((prev) =>
-                    prev ? { ...prev, display_name: newDisplayName } : null
-                );
-                toast({
-                    title: "个人信息更新成功",
-                    description: "您的显示名称已更新。",
-                });
+                    if (insertError) throw insertError;
+
+                    setUserProfile((prev) =>
+                        prev ? { ...prev, display_name: newDisplayName } : null
+                    );
+                    toast({
+                        title: "个人信息更新成功",
+                        description: "您的显示名称已更新。",
+                    });
+                } else if (existingProfile) {
+                    // If profile exists, update it
+                    const { error: updateError } = await supabase
+                        .from("profiles")
+                        .update({
+                            display_name: newDisplayName,
+                            updated_at: new Date(),
+                        })
+                        .eq("id", user.id);
+
+                    if (updateError) throw updateError;
+
+                    setUserProfile((prev) =>
+                        prev ? { ...prev, display_name: newDisplayName } : null
+                    );
+                    toast({
+                        title: "个人信息更新成功",
+                        description: "您的显示名称已更新。",
+                    });
+                } else {
+                    throw new Error("无法获取或创建用户资料");
+                }
             } catch (error) {
                 toast({
                     title: "更新失败",
