@@ -5,6 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { supabase } from "@/lib/supabase";
 import { User } from "@supabase/supabase-js";
+import { useToast } from "@/hooks/use-toast";
 
 interface DivinationResult {
     id?: string;
@@ -21,6 +22,7 @@ export function CharacterDivination() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [authMode, setAuthMode] = useState<"login" | "register">("login");
+    const { toast } = useToast();
 
     useEffect(() => {
         const fetchSession = async () => {
@@ -41,8 +43,20 @@ export function CharacterDivination() {
                 setUser(currentUser ?? null);
                 if (currentUser) {
                     fetchDivinations(currentUser.id);
+                    if (event === "SIGNED_IN") {
+                        toast({
+                            title: "登录成功",
+                            description: "欢迎回来！",
+                        });
+                    }
                 } else {
                     setResults([]);
+                    if (event === "SIGNED_OUT") {
+                        toast({
+                            title: "已退出登录",
+                            description: "期待您的再次光临！",
+                        });
+                    }
                 }
             }
         );
@@ -50,7 +64,7 @@ export function CharacterDivination() {
         return () => {
             authListener.subscription.unsubscribe();
         };
-    }, []);
+    }, [toast]);
 
     const fetchDivinations = async (userId: string) => {
         const { data, error } = await supabase
@@ -99,16 +113,24 @@ export function CharacterDivination() {
                     password,
                 });
                 if (error) throw error;
-                alert("注册成功！请检查您的邮箱进行验证。");
+                toast({
+                    title: "注册成功",
+                    description: "请查收邮件进行确认。",
+                });
             } else {
                 const { error } = await supabase.auth.signInWithPassword({
                     email,
                     password,
                 });
                 if (error) throw error;
+                // Login success toast is handled in the onAuthStateChange listener
             }
         } catch (error) {
-            alert(error.message);
+            toast({
+                title: authMode === "register" ? "注册失败" : "登录失败",
+                description: error.message,
+                variant: "destructive",
+            });
         }
     };
 
@@ -116,8 +138,13 @@ export function CharacterDivination() {
         try {
             const { error } = await supabase.auth.signOut();
             if (error) throw error;
+            // Logout success toast is handled in the onAuthStateChange listener
         } catch (error) {
-            alert(error.message);
+            toast({
+                title: "退出登录失败",
+                description: error.message,
+                variant: "destructive",
+            });
         }
     };
 
