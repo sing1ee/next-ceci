@@ -2,6 +2,7 @@
 CREATE TABLE profiles (
   id UUID REFERENCES auth.users ON DELETE CASCADE,
   display_name TEXT,
+  avatar_url TEXT,
   updated_at TIMESTAMP WITH TIME ZONE,
   PRIMARY KEY (id)
 );
@@ -17,8 +18,8 @@ CREATE POLICY "Users can view and edit their own profile" ON profiles
 CREATE OR REPLACE FUNCTION public.handle_new_user() 
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, display_name, updated_at)
-  VALUES (NEW.id, NEW.email, now());
+  INSERT INTO public.profiles (id, display_name, avatar_url, updated_at)
+  VALUES (NEW.id, NEW.email, NULL, now());
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
